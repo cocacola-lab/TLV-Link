@@ -1,7 +1,10 @@
 # Touch100k
 
+🚀🚀🚀 The implementation of **Touch100k: A Large-Scale Touch-Language-Vision Dataset for Touch-Centric Multimodal Representation**.
+
+
 <p align="center">
-  <img src="assets/data_present.png" width="450" style="margin-bottom: 0.2;"/>
+  <img src="assets/data_present.svg" width="600" style="margin-bottom: 0.2;"/>
 </p>
 
 ## ❤️ Acknowledgement
