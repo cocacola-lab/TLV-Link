@@ -14,8 +14,8 @@ import torch
 from torch import optim
 from torch.cuda.amp import GradScaler
 from transformers import CLIPPreTrainedModel
-import transformers
-transformers.logging.set_verbosity_error()
+# import transformers
+# transformers.logging.set_verbosity_error()
 from zero_shot.zeroshot_cls import evaluate_t_cls
 from model.process_clip import set_global_value, print_trainable_parameters
 
@@ -38,6 +38,9 @@ from training.scheduler import cosine_lr, const_lr, const_lr_cooldown
 from training.file_utils import pt_load, start_sync_process, remote_sync
 from train import train_one_epoch
 from model.build_model import create_vat_model
+
+other_logger = logging.getLogger("transformers.models.clip.modeling_clip")
+other_logger.setLevel(level=logging.ERROR)
 
 LATEST_CHECKPOINT_NAME = "epoch_latest.pt"
 MODEL_DICT = {"ViT-L-14": "/home/chenning/opensource_models/laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K",

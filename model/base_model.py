@@ -248,17 +248,6 @@ class TLVModel(HFCLIPModel):
 
         self.touch_model = CLIPVisionTransformer(config.vision_config)
         self.touch_projection = nn.Linear(config.vision_config.hidden_size, self.projection_dim, bias=False)
-        self.integrate_projection = nn.Sequential(
-            nn.Linear(2*self.projection_dim, self.projection_dim, bias=True),
-            nn.GELU()
-            )
-        
-        identity_concatenated = torch.cat([torch.eye(self.projection_dim), torch.eye(self.projection_dim)], dim=1)
-        with torch.no_grad():
-            self.integrate_projection[0].weight.copy_(identity_concatenated)
-            # Initialize bias if bias=True
-            if self.integrate_projection[0].bias is not None:
-                self.integrate_projection[0].bias.zero_()
 
         if add_time_attn:
             self.touch_model.embeddings = CLIPVisionEmbeddings(config.vision_config)
@@ -266,9 +255,6 @@ class TLVModel(HFCLIPModel):
         self.T = config.vision_config.num_frames // config.vision_config.tube_size
         self.touch_model.forward = self.touch_model_forward
         self.vision_model.forward = self.vision_model_forward
-
-        self.tl_logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
-        self.tv_logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
 
         
 
@@ -559,6 +545,5 @@ class TLVModel(HFCLIPModel):
             "vision_features": vision_features,
             "text_features": text_features,
             "curriculum_representation": curriculum_representation,
-            "tl_logit_scale": self.tl_logit_scale.exp(),
-            "tv_logit_scale": self.tv_logit_scale.exp(),
+            "tl_logit_scale": self.logit_scale.exp(),
         }

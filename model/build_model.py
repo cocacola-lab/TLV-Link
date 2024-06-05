@@ -52,10 +52,6 @@ def create_vat_model(args):
                     elif "visual_projection" in key:
                         new_ckpt[key] = item
                         new_ckpt[key.replace("visual_projection", "touch_projection")] = copy.deepcopy(item)
-                    elif "logit_scale" == key:
-                        new_ckpt[key] = item
-                        new_ckpt["tv_logit_scale"] = copy.deepcopy(item)
-                        new_ckpt["vl_logit_scale"] = copy.deepcopy(item)
                     else:
                         new_ckpt[key] = item   
                 incompatible_keys = model.load_state_dict(new_ckpt, strict=False if args.add_time_attn else True)

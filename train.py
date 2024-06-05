@@ -117,7 +117,7 @@ def train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist
             with torch.no_grad():
                 with autocast():
                     model_out = model(args, touch_images, vision_images, sent_input_ids, sent_attention_mask, phra_input_ids, phra_attention_mask, span, step)
-                    model_out.pop("logit_scale")
+                    model_out.pop("tl_logit_scale")
                     for key, val in model_out.items():
                         if key in accum_features:
                             accum_features[key].append(val)
@@ -145,12 +145,12 @@ def train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist
                 attention_mask = accum_attention_mask[j]
                 with autocast():
                     model_out = model(touch_images, vision_images, input_ids, attention_mask)
-                    logit_scale = model_out.pop("logit_scale")
+                    tl_logit_scale = model_out.pop("tl_logit_scale")
                     inputs = {}
                     for key, val in accum_features.items():
                         accumulated = accum_features[key]
                         inputs[key] = torch.cat(accumulated[:j] +  [model_out[key]] + accumulated[j + 1:])
-                    losses = loss(**inputs, logit_scale=logit_scale, output_dict=True)
+                    losses = loss(**inputs, logit_scale=tl_logit_scale, output_dict=True)
                     del inputs
                     total_loss = sum(losses.values())
                     losses["loss"] = total_loss
