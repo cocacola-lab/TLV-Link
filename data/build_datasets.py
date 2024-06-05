@@ -69,7 +69,7 @@ def get_data(args, epoch=0):
     # get valid data
     if args.do_eval:
         from zero_shot.datasets import get_tag_dataset, get_feeling_dataset
-
+        
         temp_batch_size = args.batch_size
         temp_val_t_cls_data = args.val_t_cls_data
 

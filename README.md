@@ -4,7 +4,7 @@
 
 
 <p align="center">
-  <img src="assets/data_present.svg" width="600" style="margin-bottom: 0.2;"/>
+  <img src="assets/data_present.svg"/>
 </p>
 
 ## ❤️ Acknowledgement

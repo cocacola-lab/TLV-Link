@@ -14,6 +14,8 @@ import torch
 from torch import optim
 from torch.cuda.amp import GradScaler
 from transformers import CLIPPreTrainedModel
+import transformers
+transformers.logging.set_verbosity_error()
 from zero_shot.zeroshot_cls import evaluate_t_cls
 from model.process_clip import set_global_value, print_trainable_parameters
 
@@ -114,7 +116,7 @@ def main(args):
             date_str = broadcast_object(args, date_str)
         args.name = '_'.join([
             date_str,
-            f"{args.clip_type}_B{args.beta_init}_span{args.span}_{args.inte_type[:3]}_{args.decay_type[:3]}",
+            f"B{args.beta_init}_span{args.span}_{args.inte_type[:3]}_{args.decay_type[:3]}",
             f"{args.lr}-{args.batch_size}-{args.epochs}-{args.lr_scheduler}", 
         ])
     args.pretrained = CHECKPOINT_DICT[args.model]
@@ -341,14 +343,10 @@ def main(args):
 
 
     if is_master(args):
-        logging.info("Model:")
-        # logging.info(f"{str(model)}")
-        logging.info("Args:")
         args_file = os.path.join(args.logs, args.name, "args.txt")
         with open(args_file, "w") as f:
             for name in sorted(vars(args)):
                 val = getattr(args, name)
-                logging.info(f"  {name}: {val}")
                 f.write(f"{name}: {val}\n")
 
     if args.distributed:
@@ -408,10 +406,8 @@ def main(args):
         params_file = os.path.join(args.logs, args.name, "params.txt")
         with open(params_file, "w") as f:
             for group_name, group in name_groups.items():
-                #logging.info(f"Group name: {group_name}:")
                 f.write(f"Group name: {group_name}:\n")
                 for i in group:
-                    #logging.info(f"Parameter name: {i['name']}. Learning rate: {i['lr']}. Weight decay: {i['weight_decay']}")
                     f.write(f"Parameter name: {i['name']}. Learning rate: {i['lr']}. Weight decay: {i['weight_decay']}\n")
 
 

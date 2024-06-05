@@ -39,7 +39,7 @@ def parse_args(args):
     parser.add_argument("--cache-dir", type=str, default='', help="",)
     parser.add_argument("--num-frames", type=int, default=8, help="",)
     parser.add_argument("--tube-size", type=int, default=1, help="",)
-    parser.add_argument("--clip-type", type=str, default="", choices=['tv', 'tl', 'vl', 'tlv', 'cl', 'vl_new'], help="",)
+    parser.add_argument("--clip_type", type=str, default="", choices=['tlv','vl'], help="",)
     parser.add_argument("--add-time-attn", default=False, action="store_true", help="")
     parser.add_argument("--unlock-time-attn", default=False, action="store_true", help="")
     parser.add_argument("--coef-lr", type=float, default=1e-4, help="")

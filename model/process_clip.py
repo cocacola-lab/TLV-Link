@@ -532,13 +532,8 @@ def print_trainable_parameters(model, msg=''):
                  f"trainable: {100 * trainable_params / all_param:.2f}%")
 
 def convert_model_to_lora(args, model):
-    if args.clip_type == 'vl' and args.add_time_attn:
-        target_modules = ["temporal_attn.k_proj", "temporal_attn.v_proj",
-                          "temporal_attn.q_proj", "temporal_attn.out_proj",
-                          "temporal_mlp.fc1", "temporal_mlp.fc2"
-                          ]
-    else:
-        target_modules = ["k_proj", "v_proj", "q_proj", "out_proj"]
+   
+    target_modules = ["k_proj", "v_proj", "q_proj", "out_proj"]
     config = LoraConfig(
         r=args.lora_r,         # 16
         lora_alpha=args.lora_alpha,  #  16
@@ -555,14 +550,10 @@ def convert_model_to_lora(args, model):
     model.vision_model.encoder = get_peft_model(model.vision_model.encoder, config)
 
     if is_master(args):
-        if args.clip_type == 'tlv' or args.clip_type == 'cl':
+        if args.clip_type == 'tlv':
             print_trainable_parameters(model.touch_model.encoder, msg='The model.touch_model.encoder: ')
 
         print_trainable_parameters(model.vision_model.encoder, msg='The model.vision_model.encoder: ')
-    # model.text_model.encoder.is_gradient_checkpointing = False
-    # model.text_model.encoder = get_peft_model(model.text_model.encoder, config)
-    # if is_master(args):
-    #     print_trainable_parameters(model.text_model.encoder, msg='The model.text_model.encoder: ')
 
 
 
@@ -607,23 +598,8 @@ def add_time_attn_block(m: nn.ModuleList, device):
 
 def resize_pos(m: nn.Module, args):
     # convert embedding
-    if args.clip_type == 'al':
-        m.image_size = [args.num_mel_bins, args.target_length]
     m.config.image_size = [m.image_size, m.image_size] if isinstance(m.image_size, int) else m.image_size
 
-    # m.config.num_channels = 1
-    # new_patch_embedding = nn.Conv2d(
-    #                         in_channels=m.config.num_channels,
-    #                         out_channels=m.embed_dim,
-    #                         kernel_size=m.patch_size,
-    #                         stride=m.patch_size,
-    #                         bias=False,
-    #                     )
-    # state_dict = m.patch_embedding.state_dict()
-    # for k, v in state_dict.items():
-    #     state_dict[k] = torch.mean(v, dim=1, keepdim=True).to(v.dtype)
-    # m.patch_embedding = new_patch_embedding
-    # m.patch_embedding.load_state_dict(state_dict)
 
     # pos resize
     old_pos_embed_state_dict = m.position_embedding.state_dict()

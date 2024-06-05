@@ -45,38 +45,20 @@ def run(model, classifier, dataloader, args):
                 target = target.to(args.local_rank)
 
                 with autocast():
-                    #print(args.clip_type)
-                    if args.clip_type == 'tlv' or args.clip_type == 'cl' or args.clip_type == 'tv':
-                        # predict
-                        gelsightA_before_output = model(args=args, touch=gelsightA_before)
-                        gelsightA_after_output = model(args=args, touch=gelsightA_after)
-                        gelsightB_before_output = model(args=args, touch=gelsightB_before)
-                        gelsightB_after_output = model(args=args, touch=gelsightB_after)
+                    
+                    # predict
+                    gelsightA_before_output = model(args=args, touch=gelsightA_before)
+                    gelsightA_after_output = model(args=args, touch=gelsightA_after)
+                    gelsightB_before_output = model(args=args, touch=gelsightB_before)
+                    gelsightB_after_output = model(args=args, touch=gelsightB_after)
 
 
-                        gelsightA_before_features = gelsightA_before_output['touch_features'] if isinstance(gelsightA_before_output, dict) else gelsightA_before_output[0]
-                        gelsightA_after_features = gelsightA_after_output['touch_features'] if isinstance(gelsightA_after_output, dict) else gelsightA_after_output[0]
-                        gelsightB_before_features = gelsightB_before_output['touch_features'] if isinstance(gelsightB_before_output, dict) else gelsightB_before_output[0]
-                        gelsightB_after_features = gelsightB_after_output['touch_features'] if isinstance(gelsightB_after_output, dict) else gelsightB_after_output[0]
-                        
+                    gelsightA_before_features = gelsightA_before_output['touch_features'] if isinstance(gelsightA_before_output, dict) else gelsightA_before_output[0]
+                    gelsightA_after_features = gelsightA_after_output['touch_features'] if isinstance(gelsightA_after_output, dict) else gelsightA_after_output[0]
+                    gelsightB_before_features = gelsightB_before_output['touch_features'] if isinstance(gelsightB_before_output, dict) else gelsightB_before_output[0]
+                    gelsightB_after_features = gelsightB_after_output['touch_features'] if isinstance(gelsightB_after_output, dict) else gelsightB_after_output[0]
 
-                        # logits = model.encode_feeling_touch_rm_proj(images.to(device=args.local_rank, dtype=input_dtype), True)
-                        # logits = 100. * logits @ classifier
-                        # # ---------
-
-                    elif args.clip_type =='tl':
-                        gelsightA_before_output = model(image=gelsightA_before)
-                        gelsightA_after_output = model(image=gelsightA_after)
-                        gelsightB_before_output = model(image=gelsightB_before)
-                        gelsightB_after_output = model(image=gelsightB_after)
-
-                        gelsightA_before_features = gelsightA_before_output['image_features'] if isinstance(gelsightA_before_output, dict) else gelsightA_before_output[0]
-                        gelsightA_after_features = gelsightA_after_output['image_features'] if isinstance(gelsightA_after_output, dict) else gelsightA_after_output[0]
-                        gelsightB_before_features = gelsightB_before_output['image_features'] if isinstance(gelsightB_before_output, dict) else gelsightB_before_output[0]
-                        gelsightB_after_features = gelsightB_after_output['image_features'] if isinstance(gelsightB_after_output, dict) else gelsightB_after_output[0]
-
-                    #gelsight_avg = (gelsightA_before_features + gelsightA_after_features + gelsightB_before_features + gelsightB_after_features)/4
-
+                    
 
                     # logits = 100. * gelsightA_during_features @ classifier
                     gelsightA_before_logits = 100. * gelsightA_before_features @ classifier
@@ -89,7 +71,6 @@ def run(model, classifier, dataloader, args):
                     # gelsight = 0.5 * gelsightA_before_features + 0.5 * gelsightA_after_features
                     # logits =  100. * gelsightA_during_features @ classifier
 
-
             else:
                 images = images.to(device=args.local_rank, dtype=input_dtype)
                 images = images.unsqueeze(2)
@@ -97,14 +78,10 @@ def run(model, classifier, dataloader, args):
 
                 with autocast():
                     # predict
-                    if args.clip_type =='tl':
-                        output = model(image=images)
-                        image_features = output['image_features'] if isinstance(output, dict) else output[0]
-                        logits = 100. * image_features @ classifier
-                    elif args.clip_type == 'tlv' or args.clip_type == 'cl' or args.clip_type == 'tv':
-                        output = model(args=args, touch=images)
-                        image_features = output['touch_features'] if isinstance(output, dict) else output[0]
-                        logits = 100. * image_features @ classifier
+                    output = model(args=args, touch=images)
+                    image_features = output['touch_features'] if isinstance(output, dict) else output[0]
+                    logits = 100. * image_features @ classifier
+                    
             embedds_list.append(image_features.cpu().numpy())
             labels_list.append(target.cpu().numpy())
 

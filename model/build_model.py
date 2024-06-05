@@ -5,7 +5,10 @@ import os.path
 import numpy as np
 import torch
 from torch import nn
-from transformers import AutoConfig, CLIPPreTrainedModel
+from transformers import AutoConfig
+# import transformers
+# transformers.logging.set_verbosity_error()
+
 
 
 from model.base_model import TLVModel
@@ -20,7 +23,7 @@ def SET_GLOBAL_VALUE(k, v):
 
 def create_vat_model(args):
 
-    config = AutoConfig.from_pretrained(args.model, cache_dir=args.cache_dir)
+    config = AutoConfig.from_pretrained(args.model)
     model= TLVModel(args, config, args.num_frames, args.add_time_attn, args.tube_size)
     model.touch_model.patch_dropout = PatchDropout(args.force_patch_dropout)
     model.vision_model.patch_dropout = PatchDropout(args.force_patch_dropout)
@@ -39,11 +42,8 @@ def create_vat_model(args):
     if args.pretrained:
         try:
             args.pretrained = os.path.join(args.cache_dir, args.pretrained)
-            if is_master(args):
-                logging.info(f'Loading pretrained {args.model} weights ({args.pretrained}).')
-            # incompatible_keys = load_checkpoint(model, pretrained, strict=False)
             ckpt = torch.load(args.pretrained, map_location='cpu')
-            if args.clip_type == 'tlv' or args.clip_type =='cl' or args.clip_type=='mcl':
+            if args.clip_type == 'tlv':
                 new_ckpt = {}
                 for key,item in ckpt.items():
                     if "vision_model" in key:

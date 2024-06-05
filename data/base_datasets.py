@@ -46,7 +46,6 @@ class TOUCH_dataset(Dataset):
                 self.id2title_folder_caps.append(item)
         self.ids = self.id2title_folder_caps[:args.train_num_samples]
 
-        self.clip_type = args.clip_type
 
         self.tokenizer = get_tokenizer(HF_HUB_PREFIX + args.model, cache_dir=args.cache_dir)
         self.vision_transform = get_vision_transform(args)
@@ -60,11 +59,8 @@ class TOUCH_dataset(Dataset):
             sent_output, phra_output= self.get_text(idx)
             sent_input_ids, sent_attention_mask = sent_output['input_ids'], sent_output['attention_mask']
             phra_input_ids, phra_attention_mask = phra_output['input_ids'], phra_output['attention_mask']
-            #print('[!][!][!]', sent_input_ids)
 
-
-            if self.clip_type == 'cl':
-                matched_modality_touch, matched_modality_vision = self.get_touch_vision(idx)
+            matched_modality_touch, matched_modality_vision = self.get_touch_vision(idx)
             return matched_modality_touch['pixel_values'], matched_modality_vision['pixel_values'], sent_input_ids, sent_attention_mask, phra_input_ids, phra_attention_mask        
         except Exception as error_msg:
             logging.info(f"Failed at {idx} with \"{error_msg}\"")
