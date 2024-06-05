@@ -33,11 +33,9 @@ from open_clip.constants import OPENAI_DATASET_MEAN, OPENAI_DATASET_STD
 class TOUCH_dataset(Dataset):
     def __init__(self, args):
         super().__init__()
-        self.text_type = args.text_type
         self.sent_type = 'sentence_desc'
         self.phra_type = 'phrase_desc'
 
-        self.title = self.text_type == 'raw'
         self.touch100k = "/home/chenning/Projects/Touch100k/dataset/finetune/touch100k"
         self.data_root = self.touch100k
 

@@ -66,33 +66,29 @@ def get_data(args, epoch=0):
         else:
             raise NameError
 
+    # get valid data
     if args.do_eval:
+        from zero_shot.datasets import get_tag_dataset, get_feeling_dataset
+
         temp_batch_size = args.batch_size
-        args.batch_size = 32 if args.val_vl_ret_data else 64
+        temp_val_t_cls_data = args.val_t_cls_data
+
         data_root = ""
-
-        if args.val_t_cls_data:
-            from t_cls.datasets import get_touch_dataset,get_feeling_dataset
-            data["t_cls"] = []
-            temp_val_t_cls_data = args.val_t_cls_data
-
-            if temp_val_t_cls_data == ['Touch_and_Go'] or temp_val_t_cls_data == ['ObjectFolderReal']:
-                data_root = "dataset/downstream/touch"
-                for val_t_cls_data in temp_val_t_cls_data:
-                    
-                    args.val_t_cls_data = val_t_cls_data
-                    # /home/chenning/Projects/Touch_ly_v2/Touch/dataset/downstream/touch/touch_and_go/hard
-                    args.touch_data_path = os.path.join(data_root, f'{val_t_cls_data}/{args.cls_mode}') 
-                    data['t_cls'].append({val_t_cls_data: get_touch_dataset(args)})
-                args.val_t_cls_data = temp_val_t_cls_data
-            elif temp_val_t_cls_data == ['feeling']:
-                data_root = "/home/chenning/Datasets/feeling/data/"
-                for val_t_cls_data in temp_val_t_cls_data:
-                    args.val_t_cls_data = val_t_cls_data
-                    args.touch_data_path = data_root
-                    data['t_cls'].append({val_t_cls_data: get_feeling_dataset(args)})
-                args.val_t_cls_data = temp_val_t_cls_data
-
+        data["t_cls"] = []
+        if temp_val_t_cls_data == ['Touch_and_Go']:
+            data_root = "dataset/downstream/touch"
+            for val_t_cls_data in temp_val_t_cls_data:              
+                args.val_t_cls_data = val_t_cls_data
+                args.touch_data_path = os.path.join(data_root, f'{val_t_cls_data}/{args.cls_mode}') 
+                data['t_cls'].append({val_t_cls_data: get_tag_dataset(args)})
+        elif temp_val_t_cls_data == ['feeling']:
+            data_root = "/home/chenning/Datasets/feeling/data/"
+            for val_t_cls_data in temp_val_t_cls_data:
+                args.val_t_cls_data = val_t_cls_data
+                args.touch_data_path = data_root
+                data['t_cls'].append({val_t_cls_data: get_feeling_dataset(args)})
+        
+        args.val_t_cls_data = temp_val_t_cls_data
         args.batch_size = temp_batch_size
 
     return data

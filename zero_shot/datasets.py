@@ -118,7 +118,7 @@ def get_feeling_dataset(args):
 
 
 
-def get_touch_dataset(args):
+def get_tag_dataset(args):
     data_path = args.touch_data_path
     transform = get_touch_transform(args)
     dataset = datasets.ImageFolder(data_path, transform=transform)

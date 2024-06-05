@@ -70,7 +70,7 @@ def zero_shot_eval(model, data, epoch, args):
         classifier = build_zero_shot_classifier(
             model,
             tokenizer=tokenizer,
-            classnames=CLASSNAMES[args.val_v_cls_data],
+            classnames=CLASSNAMES[args.val_t_cls_data],
             templates=OPENAI_IMAGENET_TEMPLATES,
             num_classes_per_batch=10,
             device=args.device,

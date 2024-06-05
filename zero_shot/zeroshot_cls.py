@@ -2,8 +2,11 @@
 import json
 import logging
 import os
+
+import torch.distributed
 from training.distributed import is_master
 from .zero_shot import zero_shot_eval
+import torch
 
 try:
     import wandb
@@ -21,11 +24,12 @@ def evaluate_t_cls(model, data, epoch, args, tb_writer=None):
 
     if not metrics:
         return metrics
-
-    logging.info(
-        f"Eval Epoch: {epoch-1} "
-        + "\t".join([f"{k}: {round(v, 4):.4f}" for k, v in metrics.items()])
-    )
+    
+    if torch.distributed.get_rank() == 0:
+        logging.info(
+            f"Eval Epoch: {epoch-1} "
+            + "\t".join([f"{k}: {round(v, 4):.4f}" for k, v in metrics.items()])
+        )
 
     if args.save_logs:
         for name, val in metrics.items():
@@ -42,6 +46,4 @@ def evaluate_t_cls(model, data, epoch, args, tb_writer=None):
         for name, val in metrics.items():
             wandb.log({f"val/{name}": val, 'epoch': epoch})
     
-    # print(metrics) #{'Touch_and_Go-zeroshot-val-top1': 0.3969008333612236, 'Touch_and_Go-zeroshot-val-top2': 0.5380702165400448}
-
     return metrics

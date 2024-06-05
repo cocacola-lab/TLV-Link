@@ -116,7 +116,7 @@ def train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist
             # First, cache the features without any gradient tracking.
             with torch.no_grad():
                 with autocast():
-                    model_out = model(touch_images, vision_images, input_ids, attention_mask)
+                    model_out = model(args, touch_images, vision_images, sent_input_ids, sent_attention_mask, phra_input_ids, phra_attention_mask, span, step)
                     model_out.pop("logit_scale")
                     for key, val in model_out.items():
                         if key in accum_features:
@@ -199,13 +199,7 @@ def train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist
                 losses_m[key].update(val.item(), batch_size)
 
             tl_logit_scale_scalar = tl_logit_scale.item()
-            #tv_logit_scale_scalar = tv_logit_scale.item()
-            # if args.add_time_attn:
-            #     if hasattr(model, 'module'):
-            #         t_gate = [[F.sigmoid(m.t_attn_gate).detach().item(), F.sigmoid(m.t_ffn_gate).detach().item()] for m in model.module.vision_model.encoder.layers]
-            #     else:
-            #         t_gate = [[F.sigmoid(m.t_attn_gate).detach().item(), F.sigmoid(m.t_ffn_gate).detach().item()] for m in model.vision_model.encoder.layers]
-            #     t_attn_gate, t_ffn_gate = list(zip(*t_gate))
+
             loss_log = " ".join(
                 [
                     f"{loss_name.capitalize()}: {loss_m.val:#.5g} ({loss_m.avg:#.5g})"
@@ -214,16 +208,7 @@ def train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist
             )
             samples_per_second = args.accum_freq * args.batch_size * args.world_size / batch_time_m.val
             samples_per_second_per_gpu = args.accum_freq * args.batch_size / batch_time_m.val
-            # if args.add_time_attn:
-            #     logging.info(
-            #         f"Train Epoch: {epoch} [{num_samples:>{sample_digits}}/{samples_per_epoch} ({percent_complete:.0f}%)] "
-            #         f"Data (t): {data_time_m.avg:.3f} "
-            #         f"Batch (t): {batch_time_m.avg:.3f}, {samples_per_second:#g}/s, {samples_per_second_per_gpu:#g}/s/gpu "
-            #         f"LR: {optimizer.param_groups[0]['lr']:5f} "
-            #         f"Logit Scale: {logit_scale_scalar:.3f} " + loss_log +
-            #         f"\nt_attn_gate: {[round(i, 2) for i in t_attn_gate]}\nt_ffn_gate: {[round(i, 2) for i in t_ffn_gate]}\n"
-            #     )
-            # else:
+
             logging.info(
                 f"Train Epoch: {epoch} [{num_samples:>{sample_digits}}/{samples_per_epoch} ({percent_complete:.0f}%)] "
                 f"Data (t): {data_time_m.avg:.3f} "
@@ -243,10 +228,7 @@ def train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist
                 "lr": optimizer.param_groups[0]["lr"]
             }
             log_data.update({name:val.val for name,val in losses_m.items()})
-            # if args.add_time_attn:
-            #     log_data.update({f'layer_{i}_t_attn_gate': attn for i, attn in enumerate(t_attn_gate)})
-            #     log_data.update({f'layer_{i}_t_ffn_gate': ffn for i, ffn in enumerate(t_ffn_gate)})
-
+            
             for name, val in log_data.items():
                 name = "train/" + name
                 if tb_writer is not None:

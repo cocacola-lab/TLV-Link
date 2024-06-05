@@ -37,11 +37,9 @@ def parse_args(args):
     ###################################
     # my new params
     parser.add_argument("--cache-dir", type=str, default='', help="",)
-    parser.add_argument("--languagebind_weight", type=str, default='', help="",)
     parser.add_argument("--num-frames", type=int, default=8, help="",)
     parser.add_argument("--tube-size", type=int, default=1, help="",)
     parser.add_argument("--clip-type", type=str, default="", choices=['tv', 'tl', 'vl', 'tlv', 'cl', 'vl_new'], help="",)
-    parser.add_argument("--text-type", type=str, default="chatgpt", help="'raw', 'ofa', 'mplug', 'polish_mplug'",)
     parser.add_argument("--add-time-attn", default=False, action="store_true", help="")
     parser.add_argument("--unlock-time-attn", default=False, action="store_true", help="")
     parser.add_argument("--coef-lr", type=float, default=1e-4, help="")
@@ -64,38 +62,6 @@ def parse_args(args):
     parser.add_argument('--val_t_cls_data', nargs='+', help="Point the dataset to eval.")
     parser.add_argument('--cls_mode', type=str, default='material', choices=['material','rough','hard','grasping',''], help="")
     parser.add_argument("--touch_data_path", default="", type=str, help="")
-
-
-    ##############################
-    # video-text retrieval
-    parser.add_argument('--val_vl_ret_data', nargs='+', help="Point the dataset to finetune.")
-    parser.add_argument('--train_csv', type=str, default='data/.train.csv', help='')
-    parser.add_argument('--val_csv', type=str, default='data/.val.csv', help='')
-    parser.add_argument('--data_path', type=str, default='data/caption.pickle', help='data pickle file path')
-    parser.add_argument('--features_path', type=str, default='data/videos_feature.pickle', help='feature path')
-    parser.add_argument('--eval_frame_order', type=int, default=0, choices=[0, 1, 2], help="Frame order, 0: ordinary order; 1: reverse order; 2: random order.")
-    parser.add_argument('--feature_framerate', type=int, default=1, help='')
-    parser.add_argument('--slice_framepos', type=int, default=2, choices=[0, 1, 2], help="0: cut from head frames; 1: cut from tail frames; 2: extract frames uniformly.")
-    parser.add_argument('--max_frames', type=int, default=8, help='')
-    parser.add_argument('--max_words', type=int, default=77, help='')
-    parser.add_argument('--batch_size_val', type=int, default=0, help='batch size eval')
-    parser.add_argument('--num_thread_reader', type=int, default=10, help='')
-
-    ############################
-    # video classification
-    parser.add_argument('--val_v_cls_data', nargs='+', help="Point the dataset to finetune.")
-    parser.add_argument('--dist_eval', action='store_true', default=False, help='Enabling distributed evaluation')
-    parser.add_argument('--sparse_sample', default=False, action='store_true')
-    parser.add_argument('--data_set', default='Kinetics-400', choices=['Kinetics-400', 'Kinetics-600'], type=str, help='dataset')
-    parser.add_argument('--nb_classes', default=400, type=int, help='number of the classification types')
-    parser.add_argument('--video_data_path', default='/your/data/path/', type=str, help='dataset path')
-    parser.add_argument('--data_root', default='', type=str, help='dataset path root')
-    parser.add_argument('--input_size', default=224, type=int, help='images input size')
-    parser.add_argument('--short_side_size', type=int, default=224)
-    parser.add_argument('--test_num_segment', type=int, default=10)
-    parser.add_argument('--test_num_crop', type=int, default=3)
-    parser.add_argument('--sampling_rate', type=int, default=16)
-    parser.add_argument('--reprob', type=float, default=0.25, metavar='PCT', help='Random erase prob (default: 0.25)')
 
     #######################
     # origin open-clip params

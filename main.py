@@ -1,6 +1,8 @@
 import glob
 import logging
 import os
+import sys
+
 import re
 import subprocess
 import sys
@@ -11,6 +13,9 @@ import numpy as np
 import torch
 from torch import optim
 from torch.cuda.amp import GradScaler
+from transformers import CLIPPreTrainedModel
+from zero_shot.zeroshot_cls import evaluate_t_cls
+from model.process_clip import set_global_value, print_trainable_parameters
 
 try:
     import wandb
@@ -18,26 +23,25 @@ except ImportError:
     wandb = None
 
 try:
-    import torch.utils.tensorboard as tensorboard
+    import tensorboardX as tensorboard
 except ImportError:
     tensorboard = None
 
-try:
-    import horovod.torch as hvd
-except ImportError:
-    hvd = None
-
-from open_clip import create_model_and_transforms, trace_model, get_tokenizer, create_loss
-from training.data import get_data
+from data.build_datasets import get_data
+from open_clip import create_model_and_transforms, create_loss
 from training.distributed import is_master, init_distributed_device, broadcast_object
 from training.logger import setup_logging
 from training.params import parse_args
 from training.scheduler import cosine_lr, const_lr, const_lr_cooldown
-from training.train import train_one_epoch, evaluate
-from training.file_utils import pt_load, check_exists, start_sync_process, remote_sync
-
+from training.file_utils import pt_load, start_sync_process, remote_sync
+from train import train_one_epoch
+from model.build_model import create_vat_model
 
 LATEST_CHECKPOINT_NAME = "epoch_latest.pt"
+MODEL_DICT = {"ViT-L-14": "/home/chenning/opensource_models/laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K",
+              "ViT-H-14": "laion/CLIP-ViT-H-14-laion2B-s32B-b79K"}
+CHECKPOINT_DICT = {"ViT-L-14": "models--laion--CLIP-ViT-L-14-DataComp.XL-s13B-b90K/snapshots/84c9828e63dc9a9351d1fe637c346d4c1c4db341/pytorch_model.bin",
+                   "ViT-H-14": "models--laion--CLIP-ViT-H-14-laion2B-s32B-b79K/snapshots/94a64189c3535c1cb44acfcccd7b0908c1c8eb23/pytorch_model.bin"}
 
 
 def random_seed(seed=42, rank=0):
@@ -51,7 +55,7 @@ def natural_key(string_):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_.lower())]
 
 
-def get_latest_checkpoint(path: str, remote : bool):
+def get_latest_checkpoint(path: str, remote: bool):
     # as writen, this glob recurses, so can pick up checkpoints across multiple sub-folders
     if remote:
         result = subprocess.run(["aws", "s3", "ls", path + "/"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -65,6 +69,25 @@ def get_latest_checkpoint(path: str, remote : bool):
         checkpoints = sorted(checkpoints, key=natural_key)
         return checkpoints[-1]
     return None
+
+def SET_GLOBAL_VALUE(k, v):
+    set_global_value(k, v)
+
+def copy_codebase(args):
+    from shutil import copytree, ignore_patterns
+    new_code_path = os.path.join(args.logs, args.name, "code")
+    if os.path.exists(new_code_path):
+        print(
+            f"Error. Experiment already exists at {new_code_path}. Use --name to specify a new experiment."
+        )
+        return -1
+    print(f"Copying codebase to {new_code_path}")
+    current_code_path = os.path.realpath(__file__)
+    for _ in range(3):
+        current_code_path = os.path.dirname(current_code_path)
+    copytree(current_code_path, new_code_path, ignore=ignore_patterns('log', 'logs', 'wandb'))
+    print("Done copying code.")
+    return 1
 
 
 def main(args):
@@ -85,21 +108,20 @@ def main(args):
     if args.name is None:
         # sanitize model name for filesystem / uri use, easier if we don't use / in name as a rule?
         model_name_safe = args.model.replace('/', '-')
-        date_str = datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
+        date_str = datetime.now().strftime("%m_%d-%H_%M")
         if args.distributed:
             # sync date_str from master to all ranks
             date_str = broadcast_object(args, date_str)
-        args.name = '-'.join([
+        args.name = '_'.join([
             date_str,
-            f"model_{model_name_safe}",
-            f"lr_{args.lr}",
-            f"b_{args.batch_size}",
-            f"j_{args.workers}",
-            f"p_{args.precision}",
+            f"{args.clip_type}_B{args.beta_init}_span{args.span}_{args.inte_type[:3]}_{args.decay_type[:3]}",
+            f"{args.lr}-{args.batch_size}-{args.epochs}-{args.lr_scheduler}", 
         ])
-
+    args.pretrained = CHECKPOINT_DICT[args.model]
+    args.model = MODEL_DICT[args.model]
     resume_latest = args.resume == 'latest'
     log_base_path = os.path.join(args.logs, args.name)
+    args.log_base_path = log_base_path
     args.log_path = None
     if is_master(args, local=args.log_local):
         os.makedirs(log_base_path, exist_ok=True)
@@ -169,8 +191,8 @@ def main(args):
     if is_master(args) and args.remote_sync is not None:
         # first make sure it works
         result = remote_sync(
-            os.path.join(args.logs, args.name), 
-            os.path.join(args.remote_sync, args.name), 
+            os.path.join(args.logs, args.name),
+            os.path.join(args.remote_sync, args.name),
             args.remote_sync_protocol
         )
         if result:
@@ -181,8 +203,8 @@ def main(args):
         # if all looks good, start a process to do this every args.remote_sync_frequency seconds
         remote_sync_process = start_sync_process(
             args.remote_sync_frequency,
-            os.path.join(args.logs, args.name), 
-            os.path.join(args.remote_sync, args.name), 
+            os.path.join(args.logs, args.name),
+            os.path.join(args.remote_sync, args.name),
             args.remote_sync_protocol
         )
         remote_sync_process.start()
@@ -192,11 +214,7 @@ def main(args):
             'It is recommended to use AMP mixed-precision instead of FP16. '
             'FP16 support needs further verification and tuning, especially for train.')
 
-    if args.horovod:
-        logging.info(
-            f'Running in horovod mode with multiple processes / nodes. Device: {args.device}.'
-            f'Process (global: {args.rank}, local {args.local_rank}), total {args.world_size}.')
-    elif args.distributed:
+    if args.distributed:
         logging.info(
             f'Running in distributed mode with multiple processes. Device: {args.device}.'
             f'Process (global: {args.rank}, local {args.local_rank}), total {args.world_size}.')
@@ -206,35 +224,24 @@ def main(args):
     dist_model = None
     args.distill = args.distill_model is not None and args.distill_pretrained is not None
     if args.distill:
-        #FIXME: support distillation with grad accum.
+        # FIXME: support distillation with grad accum.
         assert args.accum_freq == 1
-        #FIXME: support distillation with coca.
+        # FIXME: support distillation with coca.
         assert 'coca' not in args.model.lower()
 
     if isinstance(args.force_image_size, (tuple, list)) and len(args.force_image_size) == 1:
         # arg is nargs, single (square) image size list -> int
         args.force_image_size = args.force_image_size[0]
     random_seed(args.seed, 0)
-    model, preprocess_train, preprocess_val = create_model_and_transforms(
-        args.model,
-        args.pretrained,
-        precision=args.precision,
-        device=device,
-        jit=args.torchscript,
-        force_quick_gelu=args.force_quick_gelu,
-        force_custom_text=args.force_custom_text,
-        force_patch_dropout=args.force_patch_dropout,
-        force_image_size=args.force_image_size,
-        pretrained_image=args.pretrained_image,
-        image_mean=args.image_mean,
-        image_std=args.image_std,
-        aug_cfg=args.aug_cfg,
-        output_dict=True,
-    )
+
+    model = create_vat_model(args)
+    args.touch_image_size = model.touch_model.config.image_size
+    args.vision_image_size = model.vision_model.config.image_size
+
     if args.distill:
         # FIXME: currenlty assumes the model your distilling from has the same tokenizer & transforms.
         dist_model, _, _ = create_model_and_transforms(
-            args.distill_model, 
+            args.distill_model,
             args.distill_pretrained,
             device=device,
             precision=args.precision,
@@ -254,74 +261,162 @@ def main(args):
 
     random_seed(args.seed, args.rank)
 
-    if args.trace:
-        model = trace_model(model, batch_size=args.batch_size, device=device)
-
+    # if args.trace:
+    #     model = trace_model(model, batch_size=args.batch_size, device=device)
     if args.lock_image:
-        # lock image tower as per LiT - https://arxiv.org/abs/2111.07991
-        model.lock_image_tower(
-            unlocked_groups=args.lock_image_unlocked_groups,
-            freeze_bn_stats=args.lock_image_freeze_bn_stats)
+        for param in model.touch_model.embeddings.parameters():
+            param.requires_grad = False
+        for param in model.touch_model.pre_layrnorm.parameters():
+            param.requires_grad = False
+        for param in model.vision_model.embeddings.parameters():
+            param.requires_grad = False
+        for param in model.vision_model.pre_layrnorm.parameters():
+            param.requires_grad = False
+
+
+    if not args.convert_to_lora:
+        for param in model.touch_model.embeddings.parameters():
+            param.requires_grad = False
+        for param in model.touch_model.pre_layrnorm.parameters():
+            param.requires_grad = False
+        for param in model.vision_model.embeddings.parameters():
+            param.requires_grad = False
+        for param in model.vision_model.pre_layrnorm.parameters():
+            param.requires_grad = False
+        if args.add_time_attn:
+            for name, param in model.touch_model.encoder.layers.named_parameters():
+                if 'temporal' in name:
+                    param.requires_grad = True
+                else:
+                    param.requires_grad = False
+            for name, param in model.vision_model.encoder.layers.named_parameters():
+                if 'temporal' in name:
+                    param.requires_grad = True
+                else:
+                    param.requires_grad = False
+        else:
+            for name, param in model.touch_model.encoder.layers.named_parameters():
+                if 'self_attn' in name:
+                    param.requires_grad = True
+                else:
+                    param.requires_grad = False
+            for name, param in model.vision_model.encoder.layers.named_parameters():
+                if 'self_attn' in name:
+                    param.requires_grad = True
+                else:
+                    param.requires_grad = False
+    else:
+        if args.add_time_attn:
+            for name, param in model.touch_model.encoder.layers.named_parameters():
+                if 'temporal_embedding' in name or 'temporal_layer_norm1' in name:
+                    param.requires_grad = True
+            for name, param in model.vision_model.encoder.layers.named_parameters():
+                if 'temporal_embedding' in name or 'temporal_layer_norm1' in name:
+                    param.requires_grad = True
+
+    for param in model.touch_model.embeddings.position_embedding.parameters():
+        param.requires_grad = False
+    model.touch_model.embeddings.class_embedding.requires_grad = True
+    for param in model.vision_model.embeddings.position_embedding.parameters():
+        param.requires_grad = False
+    model.vision_model.embeddings.class_embedding.requires_grad = True
+
     if args.lock_text:
-        model.lock_text_tower(
-            unlocked_layers=args.lock_text_unlocked_layers,
-            freeze_layer_norm=args.lock_text_freeze_layer_norm)
+        for param in model.text_model.parameters():
+            param.requires_grad = False
+        for param in model.text_projection.parameters():
+            param.requires_grad = False
+
+
+    model.logit_scale.requires_grad = args.learn_temp
+
+    if is_master(args):
+        print_trainable_parameters(model, msg='The model: ')
 
     if args.grad_checkpointing:
-        model.set_grad_checkpointing()
+        # model.text_model.encoder.gradient_checkpointing = args.grad_checkpointing
+        model.touch_model.encoder.gradient_checkpointing = args.grad_checkpointing
+        model.vision_model.encoder.gradient_checkpointing = args.grad_checkpointing
+        
+
 
     if is_master(args):
         logging.info("Model:")
         # logging.info(f"{str(model)}")
-        logging.info("Params:")
-        params_file = os.path.join(args.logs, args.name, "params.txt")
-        with open(params_file, "w") as f:
+        logging.info("Args:")
+        args_file = os.path.join(args.logs, args.name, "args.txt")
+        with open(args_file, "w") as f:
             for name in sorted(vars(args)):
                 val = getattr(args, name)
                 logging.info(f"  {name}: {val}")
                 f.write(f"{name}: {val}\n")
 
-    if args.distributed and not args.horovod:
+    if args.distributed:
         if args.use_bn_sync:
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         ddp_args = {}
         if args.ddp_static_graph:
             # this doesn't exist in older PyTorch, arg only added if enabled
             ddp_args['static_graph'] = True
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[device], **ddp_args)
-    
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[device], **ddp_args, find_unused_parameters=True)
+
         if args.distill:
             dist_model = torch.nn.parallel.DistributedDataParallel(dist_model, device_ids=[device], **ddp_args)
 
     # create optimizer and scaler
-    optimizer = None
-    scaler = None
+    ############################################################
+    # if args.train_data or args.dataset_type == "synthetic":
+    assert not args.trace, 'Cannot train with traced model'
 
-    if args.train_data or args.dataset_type == "synthetic":
-        assert not args.trace, 'Cannot train with traced model'
+    no_decay = lambda n, p: p.ndim < 2 or "bn" in n or "ln" in n or "bias" in n or 'logit_scale' in n or 'class_embedding' in n or 'patch_embedding' in n
+    decay = lambda n, p: not no_decay(n, p)
 
-        exclude = lambda n, p: p.ndim < 2 or "bn" in n or "ln" in n or "bias" in n or 'logit_scale' in n
-        include = lambda n, p: not exclude(n, p)
+    lora = lambda n, p: "lora" in n
+    non_lora = lambda n, p: not lora(n, p)
 
-        named_parameters = list(model.named_parameters())
-        gain_or_bias_params = [p for n, p in named_parameters if exclude(n, p) and p.requires_grad]
-        rest_params = [p for n, p in named_parameters if include(n, p) and p.requires_grad]
+    named_parameters = list(model.named_parameters())
+    no_decay_non_lora_params = [[n, p] for n, p in named_parameters if no_decay(n, p) and non_lora(n, p) and p.requires_grad]
+    decay_non_lora_params = [[n, p] for n, p in named_parameters if decay(n, p) and non_lora(n, p) and p.requires_grad]
 
-        optimizer = optim.AdamW(
-            [
-                {"params": gain_or_bias_params, "weight_decay": 0.},
-                {"params": rest_params, "weight_decay": args.wd},
-            ],
-            lr=args.lr,
-            betas=(args.beta1, args.beta2),
-            eps=args.eps,
-        )
-        if args.horovod:
-            optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
-            hvd.broadcast_parameters(model.state_dict(), root_rank=0)
-            hvd.broadcast_optimizer_state(optimizer, root_rank=0)
+    no_decay_lora_params = [[n, p] for n, p in named_parameters if no_decay(n, p) and lora(n, p) and p.requires_grad]
+    decay_lora_params = [[n, p] for n, p in named_parameters if decay(n, p) and lora(n, p) and p.requires_grad]
 
-        scaler = GradScaler() if args.precision == "amp" else None
+
+    param_groups = []
+    if no_decay_non_lora_params: param_groups.append({"params": [p for n, p in no_decay_non_lora_params], "weight_decay": 0., 'lr': args.lr * args.coef_lr})
+    if decay_non_lora_params: param_groups.append({"params": [p for n, p in decay_non_lora_params], "weight_decay": args.wd, 'lr': args.lr * args.coef_lr})
+    if no_decay_lora_params: param_groups.append({"params": [p for n, p in no_decay_lora_params], "weight_decay": 0.})
+    if decay_lora_params: param_groups.append({"params": [p for n, p in decay_lora_params], "weight_decay": args.wd})
+
+    optimizer = optim.AdamW(
+        param_groups,
+        lr=args.lr,
+        betas=(args.beta1, args.beta2),
+        eps=args.eps,
+    )
+
+    name_groups = {}
+    if no_decay_non_lora_params:
+        name_groups['no_decay_non_lora_params'] = [{"name": n, "weight_decay": 0., 'lr': args.lr * args.coef_lr} for n, p in no_decay_non_lora_params]
+    if decay_non_lora_params:
+        name_groups['decay_non_lora_params'] = [{"name": n, "weight_decay": args.wd, 'lr': args.lr * args.coef_lr} for n, p in decay_non_lora_params]
+    if no_decay_lora_params:
+        name_groups['no_decay_lora_params'] = [{"name": n, "weight_decay": 0., 'lr': args.lr} for n, p in no_decay_lora_params]
+    if decay_lora_params:
+        name_groups['decay_lora_params'] = [{"name": n, "weight_decay": args.wd, 'lr': args.lr} for n, p in decay_lora_params]
+    if is_master(args):
+        params_file = os.path.join(args.logs, args.name, "params.txt")
+        with open(params_file, "w") as f:
+            for group_name, group in name_groups.items():
+                #logging.info(f"Group name: {group_name}:")
+                f.write(f"Group name: {group_name}:\n")
+                for i in group:
+                    #logging.info(f"Parameter name: {i['name']}. Learning rate: {i['lr']}. Weight decay: {i['weight_decay']}")
+                    f.write(f"Parameter name: {i['name']}. Learning rate: {i['lr']}. Weight decay: {i['weight_decay']}\n")
+
+
+    scaler = GradScaler() if args.precision == "amp" else None
+    ############################################################
 
     # optionally resume from a checkpoint
     start_epoch = 0
@@ -333,9 +428,14 @@ def main(args):
             sd = checkpoint["state_dict"]
             if not args.distributed and next(iter(sd.items()))[0].startswith('module'):
                 sd = {k[len('module.'):]: v for k, v in sd.items()}
-            model.load_state_dict(sd)
+            miss, unexpect = model.load_state_dict(sd, strict=False)
+            # print(miss, unexpect)
+            assert unexpect == [] or unexpect == ['text_model.embeddings.position_ids'] or unexpect == ['module.text_model.embeddings.position_ids']
+            if unexpect == ['text_model.embeddings.position_ids'] or unexpect == ['module.text_model.embeddings.position_ids']:
+                logging.warning(f"Unexpected key: {unexpect}")
             if optimizer is not None:
-                optimizer.load_state_dict(checkpoint["optimizer"])
+                if args.do_train:
+                    optimizer.load_state_dict(checkpoint["optimizer"])
             if scaler is not None and 'scaler' in checkpoint:
                 scaler.load_state_dict(checkpoint['scaler'])
             logging.info(f"=> resuming checkpoint '{args.resume}' (epoch {start_epoch})")
@@ -345,21 +445,23 @@ def main(args):
             logging.info(f"=> loaded checkpoint '{args.resume}' (epoch {start_epoch})")
 
     # initialize datasets
-    data = get_data(args, (preprocess_train, preprocess_val), epoch=start_epoch, tokenizer=get_tokenizer(args.model))
+    data = get_data(args, epoch=start_epoch)
+    if is_master(args):
+        logging.info(f"{data})")
     assert len(data), 'At least one train or eval dataset must be specified.'
 
     # create scheduler if train
     scheduler = None
-    if 'train' in data and optimizer is not None:
-        total_steps = (data["train"].dataloader.num_batches // args.accum_freq) * args.epochs
+    if f'{args.clip_type}_pt' in data and optimizer is not None:
+        total_steps = (data[f'{args.clip_type}_pt'].dataloader.num_batches // args.accum_freq) * args.epochs
         if args.lr_scheduler == "cosine":
             scheduler = cosine_lr(optimizer, args.lr, args.warmup, total_steps)
         elif args.lr_scheduler == "const":
             scheduler = const_lr(optimizer, args.lr, args.warmup, total_steps)
         elif args.lr_scheduler == "const-cooldown":
-            assert args.epochs_cooldown is not None,\
+            assert args.epochs_cooldown is not None, \
                 "Please specify the number of cooldown epochs for this lr schedule."
-            cooldown_steps = (data["train"].dataloader.num_batches // args.accum_freq) * args.epochs_cooldown
+            cooldown_steps = (data[f'{args.clip_type}_pt'].dataloader.num_batches // args.accum_freq) * args.epochs_cooldown
             scheduler = const_lr_cooldown(
                 optimizer, args.lr, args.warmup, total_steps,
                 cooldown_steps, args.lr_cooldown_power, args.lr_cooldown_end)
@@ -375,40 +477,44 @@ def main(args):
         assert tensorboard is not None, "Please install tensorboard."
         writer = tensorboard.SummaryWriter(args.tensorboard_path)
 
-    if args.wandb and is_master(args):
-        assert wandb is not None, 'Please install wandb.'
-        logging.debug('Starting wandb.')
-        args.train_sz = data["train"].dataloader.num_samples
-        if args.val_data is not None:
-            args.val_sz = data["val"].dataloader.num_samples
-        # you will have to configure this for your project!
-        wandb.init(
-            project=args.wandb_project_name,
-            name=args.name,
-            id=args.name,
-            notes=args.wandb_notes,
-            tags=[],
-            resume='auto' if args.resume == "latest" else None,
-            config=vars(args),
-        )
-        if args.debug:
-            wandb.watch(model, log='all')
-        wandb.save(params_file)
-        logging.debug('Finished loading wandb.')
+    # if args.wandb and is_master(args):
+    #     assert wandb is not None, 'Please install wandb.'
+    #     logging.debug('Starting wandb.')
+    #     args.train_sz = data["train"].dataloader.num_samples
+    #     if args.val_data is not None:
+    #         args.val_sz = data["val"].dataloader.num_samples
+    #     # you will have to configure this for your project!
+    #     wandb.init(
+    #         project=args.wandb_project_name,
+    #         name=args.name,
+    #         id=args.name,
+    #         notes=args.wandb_notes,
+    #         tags=[],
+    #         resume='auto' if args.resume == "latest" else None,
+    #         config=vars(args),
+    #     )
+    #     if args.debug:
+    #         wandb.watch(model, log='all')
+    #     wandb.save(params_file)
+    #     logging.debug('Finished loading wandb.')
 
     if args.torchcompile:
         logging.info('Compiling model...')
         model = torch.compile(model)
 
-    if 'train' not in data:
+    if f'{args.clip_type}_pt' not in data:
         # If using int8, convert to inference mode.
         if args.use_bnb_linear is not None:
             from open_clip.utils import convert_int8_model_to_inference_mode
             convert_int8_model_to_inference_mode(model)
         # Evaluate.
-        evaluate(model, data, start_epoch, args, writer)
+        
+        if "t_cls" in data:
+            for sub_data in data['t_cls']:
+                evaluate_t_cls(model, sub_data, start_epoch, args, writer)
         return
 
+    torch.distributed.barrier()
     loss = create_loss(args)
 
     for epoch in range(start_epoch, args.epochs):
@@ -418,9 +524,10 @@ def main(args):
         train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist_model, args, tb_writer=writer)
         completed_epoch = epoch + 1
 
-        if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
-            evaluate(model, data, completed_epoch, args, writer)
-
+        if "t_cls" in data:
+            for sub_data in data['t_cls']:
+                metrics = evaluate_t_cls(model, sub_data, completed_epoch, args, writer)
+        
         # Saving checkpoints.
         if args.save_logs:
             checkpoint_dict = {
@@ -433,7 +540,7 @@ def main(args):
                 checkpoint_dict["scaler"] = scaler.state_dict()
 
             if completed_epoch == args.epochs or (
-                args.save_frequency > 0 and (completed_epoch % args.save_frequency) == 0
+                    args.save_frequency > 0 and (completed_epoch % args.save_frequency) == 0
             ):
                 torch.save(
                     checkpoint_dict,
@@ -450,7 +557,9 @@ def main(args):
                 latest_save_path = os.path.join(args.checkpoint_path, LATEST_CHECKPOINT_NAME)
                 torch.save(checkpoint_dict, tmp_save_path)
                 os.replace(tmp_save_path, latest_save_path)
-
+    
+    torch.distributed.barrier()
+    
     if args.wandb and is_master(args):
         wandb.finish()
 
@@ -459,31 +568,17 @@ def main(args):
         logging.info('Final remote sync.')
         remote_sync_process.terminate()
         result = remote_sync(
-            os.path.join(args.logs, args.name), 
-            os.path.join(args.remote_sync, args.name), 
+            os.path.join(args.logs, args.name),
+            os.path.join(args.remote_sync, args.name),
             args.remote_sync_protocol
         )
         if result:
             logging.info('Final remote sync successful.')
         else:
             logging.info('Final remote sync failed.')
-    
 
-def copy_codebase(args):
-    from shutil import copytree, ignore_patterns
-    new_code_path = os.path.join(args.logs, args.name, "code")
-    if os.path.exists(new_code_path):
-        print(
-            f"Error. Experiment already exists at {new_code_path}. Use --name to specify a new experiment."
-        )
-        return -1
-    print(f"Copying codebase to {new_code_path}")
-    current_code_path = os.path.realpath(__file__)
-    for _ in range(3):
-        current_code_path = os.path.dirname(current_code_path)
-    copytree(current_code_path, new_code_path, ignore=ignore_patterns('log', 'logs', 'wandb'))
-    print("Done copying code.")
-    return 1
+
+
 
 
 if __name__ == "__main__":

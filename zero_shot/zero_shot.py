@@ -125,7 +125,6 @@ def run(model, classifier, dataloader, args):
 
     embedds_list = np.concatenate(embedds_list)
     labels_list = np.concatenate(labels_list)
-    print(embedds_list.shape, labels_list.shape)
     import joblib
 
     datas = {}
