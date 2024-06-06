@@ -2,14 +2,8 @@ __pycache__
 .idea
 .vscode
 
-dataset/downstream/touch/feeling/data
-dataset/downstream/touch/Touch_and_Go/hard
-dataset/downstream/touch/Touch_and_Go/material
-dataset/downstream/touch/Touch_and_Go/rough
-
-dataset/train/touch100k/touch
-dataset/train/touch100k/vision
-dataset/train/touch100k/data_list.json
+dataset/downstream/
+dataset/train/
 
 logs/
 
