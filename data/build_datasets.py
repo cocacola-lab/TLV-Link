@@ -73,7 +73,7 @@ def get_data(args, epoch=0):
         temp_batch_size = args.batch_size
         temp_val_t_cls_data = args.val_t_cls_data
 
-        data_root = "dataset/downstream/touch/"
+        data_root = "dataset/downstream/"
         data["t_cls"] = []
         if temp_val_t_cls_data == ['Touch_and_Go']:
             for val_t_cls_data in temp_val_t_cls_data:              

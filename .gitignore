@@ -5,10 +5,16 @@ __pycache__
 .idea
 .vscode
 
-dataset/downstream/*
-!dataset/downstream/.gitignore
-dataset/train/*
-!dataset/train/.gitignore
+dataset/downstream/feeling/*
+!dataset/downstream/feeling/__init__.py
+dataset/downstream/Touch_and_Go/hard/*
+!dataset/downstream/Touch_and_Go/hard/__init__.py
+dataset/downstream/Touch_and_Go/material/*
+!dataset/downstream/Touch_and_Go/material/__init__.py
+dataset/downstream/Touch_and_Go/rough/*
+!dataset/downstream/Touch_and_Go/rough/__init__.py
+dataset/train/touch100k/*
+!dataset/train/touch100k/__init__.py
 
 logs/
 
