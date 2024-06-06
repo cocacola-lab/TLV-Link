@@ -5,8 +5,8 @@ __pycache__
 .idea
 .vscode
 
-dataset/downstream
-dataset/train
+dataset/downstream/touch
+dataset/train/touch100k
 
 logs/
 
