@@ -5,8 +5,10 @@ __pycache__
 .idea
 .vscode
 
-_dataset/downstream/
-_dataset/train/
+dataset/downstream/*
+!dataset/downstream/.gitignore
+dataset/train/*
+!dataset/train/.gitignore
 
 logs/
 
