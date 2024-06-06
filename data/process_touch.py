@@ -22,9 +22,6 @@ def get_touch_transform(args):
         ]
     )
 
-    #model, _, transform = open_clip.create_model_and_transforms('ViT-L-14', pretrained='/home/liyou/opensource_models/laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K/open_clip_pytorch_model.bin')
-
-
     
     return transform
 

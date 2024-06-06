@@ -97,23 +97,6 @@ def run(model, classifier, dataloader, args):
     top1 = (top1 / n)
     top2 = (top2 / n)
 
-    import numpy as np
-    from sklearn import metrics
-
-    embedds_list = np.concatenate(embedds_list)
-    labels_list = np.concatenate(labels_list)
-    import joblib
-
-    datas = {}
-    datas['emb'] = embedds_list
-    datas['label'] = labels_list
-    joblib.dump(datas, '/home/chenning/Projects/Touch_ly_v2/Touch/grasping_emb_label_epoch9.joblib')
-
-    preds_ = np.concatenate(preds)
-    labels_ = np.concatenate(labels)
-    # fpr, tpr, thresholds = metrics.roc_curve(labels_, preds_, drop_intermediate=False)
-    # auc = metrics.auc(fpr, tpr)
-    # return top1, top2, auc
     return top1, top2
 
 

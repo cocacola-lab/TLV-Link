@@ -17,5 +17,3 @@ dataset/train/touch100k/*
 !dataset/train/touch100k/__init__.py
 
 logs/
-
-test.py

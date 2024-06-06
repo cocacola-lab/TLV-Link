@@ -16,7 +16,7 @@ class FeelingLabel(Dataset):
 
     def __init__(self, root, transform=None, target_transform=None, two_crop=False, mode='train', label='full', data_amount=100):
         self.two_crop = two_crop
-        self.dataroot = '/home/chenning/Datasets/feeling/data'
+        self.dataroot = 'dataset/downstream/feeling/data'
         self.mode = mode
         if mode == 'train':
             with open(os.path.join(root, 'train_info.json'),'r',encoding='utf-8') as f:

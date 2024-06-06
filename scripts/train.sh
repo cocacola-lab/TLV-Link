@@ -6,7 +6,7 @@ CUDA_VISIBLE_DEVICES=0,3 torchrun --nnodes 1 --nproc_per_node 2 --master_port 29
     -m main  \
     --do_train --beta-init 0.9 --span 0.9 --inte-type "above" --decay-type "linear"\
     --train-data ${ANNOTATION} \
-    --train-num-samples 100 \
+    --train-num-samples 100147 \
     --clip_type "tlv" \
     --init-temp 0.07 --learn-temp \
     --model "ViT-L-14" --cache-dir ${CACHE_DIR} \
