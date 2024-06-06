@@ -36,7 +36,7 @@ class TOUCH_dataset(Dataset):
         self.sent_type = 'sentence_desc'
         self.phra_type = 'phrase_desc'
 
-        self.touch100k = "/home/chenning/Projects/Touch100k/dataset/finetune/touch100k"
+        self.touch100k = "dataset/train/touch100k"
         self.data_root = self.touch100k
 
         self.id2title_folder_caps = []
@@ -45,7 +45,6 @@ class TOUCH_dataset(Dataset):
                 item = json.loads(line)
                 self.id2title_folder_caps.append(item)
         self.ids = self.id2title_folder_caps[:args.train_num_samples]
-
 
         self.tokenizer = get_tokenizer(HF_HUB_PREFIX + args.model, cache_dir=args.cache_dir)
         self.vision_transform = get_vision_transform(args)

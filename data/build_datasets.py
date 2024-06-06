@@ -73,19 +73,17 @@ def get_data(args, epoch=0):
         temp_batch_size = args.batch_size
         temp_val_t_cls_data = args.val_t_cls_data
 
-        data_root = ""
+        data_root = "dataset/downstream/touch/"
         data["t_cls"] = []
         if temp_val_t_cls_data == ['Touch_and_Go']:
-            data_root = "dataset/downstream/touch"
             for val_t_cls_data in temp_val_t_cls_data:              
                 args.val_t_cls_data = val_t_cls_data
                 args.touch_data_path = os.path.join(data_root, f'{val_t_cls_data}/{args.cls_mode}') 
                 data['t_cls'].append({val_t_cls_data: get_tag_dataset(args)})
         elif temp_val_t_cls_data == ['feeling']:
-            data_root = "/home/chenning/Datasets/feeling/data/"
             for val_t_cls_data in temp_val_t_cls_data:
                 args.val_t_cls_data = val_t_cls_data
-                args.touch_data_path = data_root
+                args.touch_data_path = os.path.join(data_root, f'{val_t_cls_data}/data') 
                 data['t_cls'].append({val_t_cls_data: get_feeling_dataset(args)})
         
         args.val_t_cls_data = temp_val_t_cls_data

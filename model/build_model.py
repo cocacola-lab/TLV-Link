@@ -6,9 +6,6 @@ import numpy as np
 import torch
 from torch import nn
 from transformers import AutoConfig
-# import transformers
-# transformers.logging.set_verbosity_error()
-
 
 
 from model.base_model import TLVModel
@@ -22,7 +19,7 @@ def SET_GLOBAL_VALUE(k, v):
     set_global_value(k, v)
 
 def create_vat_model(args):
-
+    args.model = os.path.join(args.cache_dir, args.model)
     config = AutoConfig.from_pretrained(args.model)
     model= TLVModel(args, config, args.num_frames, args.add_time_attn, args.tube_size)
     model.touch_model.patch_dropout = PatchDropout(args.force_patch_dropout)
@@ -54,15 +51,15 @@ def create_vat_model(args):
                         new_ckpt[key.replace("visual_projection", "touch_projection")] = copy.deepcopy(item)
                     else:
                         new_ckpt[key] = item   
-                incompatible_keys = model.load_state_dict(new_ckpt, strict=False if args.add_time_attn else True)
+                model.load_state_dict(new_ckpt, strict=False if args.add_time_attn else True)
             else:
-                incompatible_keys = model.load_state_dict(ckpt, strict=False if args.add_time_attn else True)
+                model.load_state_dict(ckpt, strict=False if args.add_time_attn else True)
 
             # if is_master(args):
             #     logging.info(incompatible_keys)
         except Exception as e:
             if is_master(args):
-                logging.info(f"Failed loading pretrained model with {e}")
+                logging.info(f"Not all keys can match completely. {e}")
     else:
         if is_master(args):
             logging.info(f"No pretrained model to load in \'{args.pretrained}\'")

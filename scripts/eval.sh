@@ -1,6 +1,6 @@
 CACHE_DIR="/home/chenning/opensource_models/"
 RESUME="logs/06_05-15_31_B0.9_span0.9_abo_lin_0.0002-96-12-cosine/checkpoints/epoch_1.pt"
-ANNOTATION="dataset/finetune/touch100k/data_list.json"
+ANNOTATION="dataset/train/touch100k/data_list.json"
 # add
 TORCH_DISTRIBUTED_DEBUG=DETAIL HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
 CUDA_VISIBLE_DEVICES=0,3 torchrun --nnodes 1 --nproc_per_node 2 --master_port 29607 \

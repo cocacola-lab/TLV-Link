@@ -39,14 +39,9 @@ from training.file_utils import pt_load, start_sync_process, remote_sync
 from train import train_one_epoch
 from model.build_model import create_vat_model
 
-other_logger = logging.getLogger("transformers.models.clip.modeling_clip")
-other_logger.setLevel(level=logging.ERROR)
-
 LATEST_CHECKPOINT_NAME = "epoch_latest.pt"
-MODEL_DICT = {"ViT-L-14": "/home/chenning/opensource_models/laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K",
-              "ViT-H-14": "laion/CLIP-ViT-H-14-laion2B-s32B-b79K"}
-CHECKPOINT_DICT = {"ViT-L-14": "models--laion--CLIP-ViT-L-14-DataComp.XL-s13B-b90K/snapshots/84c9828e63dc9a9351d1fe637c346d4c1c4db341/pytorch_model.bin",
-                   "ViT-H-14": "models--laion--CLIP-ViT-H-14-laion2B-s32B-b79K/snapshots/94a64189c3535c1cb44acfcccd7b0908c1c8eb23/pytorch_model.bin"}
+MODEL_DICT = {"ViT-L-14": "laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K"}
+CHECKPOINT_DICT = {"ViT-L-14": "laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K/pytorch_model.bin"}
 
 
 def random_seed(seed=42, rank=0):
@@ -427,11 +422,8 @@ def main(args):
             sd = checkpoint["state_dict"]
             if not args.distributed and next(iter(sd.items()))[0].startswith('module'):
                 sd = {k[len('module.'):]: v for k, v in sd.items()}
-            miss, unexpect = model.load_state_dict(sd, strict=False)
-            # print(miss, unexpect)
-            assert unexpect == [] or unexpect == ['text_model.embeddings.position_ids'] or unexpect == ['module.text_model.embeddings.position_ids']
-            if unexpect == ['text_model.embeddings.position_ids'] or unexpect == ['module.text_model.embeddings.position_ids']:
-                logging.warning(f"Unexpected key: {unexpect}")
+            model.load_state_dict(sd, strict=False)
+        
             if optimizer is not None:
                 if args.do_train:
                     optimizer.load_state_dict(checkpoint["optimizer"])
