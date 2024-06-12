@@ -1,4 +1,4 @@
-# Touch100k
+# TLV-Link
 
 🚀🚀🚀 The implementation of **Touch100k: A Large-Scale Touch-Language-Vision Dataset for Touch-Centric Multimodal Representation**.
 
